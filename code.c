@@ -10,6 +10,11 @@ GLFWwindow* window;
 VkInstance instance;
 VkDebugUtilsMessengerEXT debugMessenger;
 VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+struct {
+	graphicsFaimly//<==== need c language understand.
+} indices;
+VkDevice device;
+VkQueue graphicsQueue;
 
 #ifdef NDEBUG
 	bool const enableValidationLayers = false;
@@ -189,6 +194,17 @@ bool isDeviceSuitable(VkPhysicalDevice device) {
 	// vkGetPhysicalDeviceProperties(device, &deviceProperties);
 	// VkPhysicalDeviceFeatures deviceFeatures;
 	// vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+	
+	uint32_t familyCount = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &familyCount, NULL);
+	VkQueueFamilyProperties families[familyCount];
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &familyCount, families);
+	
+	for (uint32_t i = 0; i < familyCount; ++i) {
+		if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+			indices.graphicsFaimly = i;
+		}
+	}
 	return true;
 }
 void pickPhysicalDevice() {
@@ -211,6 +227,37 @@ void pickPhysicalDevice() {
 		return;
 	}
 }
+void createLogicalDevice() {
+	float queuePriority = 1.0f;
+	VkDeviceQueueCreateInfo queueCreateInfo = {
+		.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+		.queueFamilyIndex = indices.graphicsFaimly.value,
+		.queueCount = 1,
+		.pQueuePriorities = &queuePriority,
+	};
+	VkPhysicalDeviceFeatures deviceFeatures{};
+	VkDeviceCreateInfo createInfo = {
+		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+		.pQueueCreateInfos = &queueCreateInfo,
+		.queueCreateInfoCount = 1,
+		.pEnabledFeatures = &deviceFeatures,
+		.enabledExtensionCount = 0,
+	};
+	/* for the compatible with older vulkan implementations */
+	uint32_t extensionCount = getRequiredExtensions(NULL);
+	createInfo.enabledExtensionCount = extensionCount;
+	
+	char const* extensions[extensionCount];
+	getRequiredExtensions(extensions);
+	createInfo.ppEnabledExtensionNames = extensions;
+	
+	if (vkCreateDevice(physicalDevice, &createInfo, NULL, &device)
+		!= VK_SUCCESS) {
+		printf("failed to create logical device!\n");
+		return;
+	}
+	vkGetDeviceQueue(device, indices.graphicsFaimly.value, 0, &graphicsQueue);
+}
 void mainLoop() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -220,6 +267,7 @@ void cleanup() {
 	if (enableValidationLayers)
 		destroyDebugUtilsMessengerEXT(instance, debugMessenger, NULL);
 	vkDestroyInstance(instance, NULL);
+	vkDestroyDevice(device, NULL);
 	glfwDestroyWindow(window);
 	glfwTerminate();
 }
@@ -228,6 +276,7 @@ int main(int argc, char const* argv[]) {
 	initVulkan();
 	setupDebugMessenger();
 	pickPhysicalDevice();
+	createLogicalDevice();
 	mainLoop();
 	cleanup();
 	return EXIT_SUCCESS;
